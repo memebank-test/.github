@@ -5,10 +5,16 @@ Security incident: Linear `DEN-2808`; GitHub `memebank/memebank-e2e#6`.
 
 ## Policy
 
-Test repositories may read private source repositories only through short-lived,
+Test repositories may read private production source only through short-lived,
 least-privilege credentials produced by an approved GitHub App or, during a
-bounded transition, a fine-grained token restricted to exact repositories and
+bounded transition, a fine-grained token restricted to exact repositories with
 Contents read-only.
+
+The current transition secret name is `TEST_FLEET_READ_TOKEN`. The name is not
+proof that the credential is correctly scoped: its repository allowlist,
+permissions, owner, expiry, rotation, and revocation procedure must be verified
+separately. The preferred steady state is a selected-repository GitHub App that
+mints short-lived installation tokens per workflow run.
 
 Repository deploy keys are prohibited for generated test-fleet source checkout.
 A deploy private key was committed in closed, unmerged
@@ -21,32 +27,39 @@ files, replacement secrets, or incident documents.
 Every private-source checkout must:
 
 - pin an immutable 40-character commit SHA;
-- use a short-lived token scoped to the selected source repository;
-- set `persist-credentials: false`;
+- use a short-lived credential scoped to the selected source repositories;
+- set `persist-credentials: false` for Actions checkout steps;
 - disable unnecessary tags, LFS, and submodules unless reviewed;
-- avoid writing credentials to `.git/config`, the worktree, caches, artifacts,
-  command-line output, or generated files;
+- avoid embedding credentials in clone URLs or writing them to `.git/config`,
+  the worktree, caches, artifacts, process output, or generated files;
+- remove temporary askpass and credential helpers before the job ends;
 - perform no branch, tag, release, secret, workflow, deploy-key, or package write;
-- run source validation before any publication or deployment step.
+- run source validation before any publication or deployment step; and
+- classify missing or rejected access as a blocked dependency rather than a
+  product regression.
 
-The test-fleet App should have Contents and Metadata read only. Any additional
-permission requires a separate threat model and selected-repository installation.
+The test-fleet App should have only Metadata read and Contents read. Any
+additional permission requires a separate threat model and selected-repository
+installation.
 
 ## Credential canary
 
 A canary must prove all of the following:
 
-1. checkout of approved private source at the pinned SHA succeeds;
+1. checkout of every approved private source at the pinned SHA succeeds;
 2. checkout of an unapproved private repository fails;
 3. branch or tag creation fails;
 4. workflow modification and dispatch with write intent fail;
 5. Actions-secret and deploy-key enumeration fail;
-6. the token is absent from logs, artifacts, caches, and repository configuration;
-7. revoking the installation or secret makes the next checkout fail closed.
+6. the credential is absent from logs, artifacts, caches, process lists, and
+   repository configuration;
+7. repositories outside the documented allowlist cannot be read;
+8. revoking the installation or secret makes the next checkout fail closed.
 
-The canonical tracking issue for this organization is
-`memebank-test/.github#8`. The canary evidence belongs in GitHub and is linked
-from Linear `DEN-2918`.
+The canonical tracking issue is `memebank-test/.github#8`. Canary evidence
+belongs in GitHub and is linked from Linear `DEN-2918`. Evidence records public
+IDs, repository names, timestamps, workflow runs, and pass/fail outcomes—not
+secret values.
 
 ## Credential-outage fallback
 
@@ -70,30 +83,33 @@ headless SDK tests without a private repository credential.
 
 ## Rotation and incident response
 
-Record the App installation ID, selected repositories, owner, key creation date,
-rotation deadline, and revocation procedure in the approved secret-management
-system. Do not store the App private key or a generated installation token in
-GitHub source.
+Record the App installation ID or fine-grained credential ID, selected
+repositories, owner, creation date, expiry, next rotation, and revocation
+procedure in the approved secret-management system. Do not store an App private
+key or generated installation token in GitHub source.
 
 On suspected exposure:
 
 1. revoke first;
-2. identify by public fingerprint or credential ID, never by copying secret bytes;
+2. identify the credential by public fingerprint or credential ID, never by
+   copying secret bytes;
 3. remove named refs and obsolete encrypted secrets;
 4. scan active source and fetched history with a non-disclosing scanner;
-5. qualify the replacement access path in a `*-test` repository;
+5. qualify the replacement path in a `*-test` repository;
 6. preserve only non-secret evidence and exact timestamps;
 7. request history cleanup when policy requires it.
 
 ## GitHub Project fields
 
-Track credential work in project 1 with:
+Track credential work in Project 1 with:
 
 - **Linear:** `DEN-2918` or the specific security incident;
-- **Control:** App installation / selected repository / canary / rotation / incident;
+- **Control:** App installation / selected repository / canary / rotation /
+  incident;
 - **Source organization:** exact GitHub owner;
 - **Test repository:** exact repository;
-- **Credential class:** GitHub App / temporary fine-grained token / snapshot fallback;
+- **Credential class:** GitHub App / temporary fine-grained token / snapshot
+  fallback;
 - **Status:** blocked / configured / canary green / rotated / revoked;
 - **Evidence:** exact workflow run or administrator record;
 - **Expiry or next rotation:** absolute date;
